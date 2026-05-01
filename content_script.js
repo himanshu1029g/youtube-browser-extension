@@ -1,207 +1,143 @@
-// ─────────────────────────────────────────────
-//  YT Study Helper — content_script.js
-//  Runs on every YouTube tab
-//  Handles: video control, screenshot to clipboard
-// ─────────────────────────────────────────────
-
+// ─── State ───────────────────────────────────────
 let video = null;
-let pausedByExtension = false;
-let resumeByExtension = false;
+let pauseReason = null;
+// pauseReason values:
+//   null         → user ne khud pause kiya
+//   'TAB_SWITCH' → tab change se auto pause
+//   'MOUSE_LEAVE'→ cursor window se bahar
+//   'DUAL_SYNC'  → dusri tab play hui
 
+// ─── Wait for video ──────────────────────────────
 function waitForVideo(callback) {
-    const check = () => {
-        const v = document.querySelector('video');
-        if (v) {
-            callback(v);
-        } else {
-            setTimeout(check, 500);
-        }
-    };
-    check();
+  const check = () => {
+    const v = document.querySelector('video');
+    if (v) { video = v; callback(v); }
+    else setTimeout(check, 500);
+  };
+  check();
 }
 
-// ─── INIT ───────────────────────────────────────
+// ─── Init ────────────────────────────────────────
 waitForVideo((v) => {
-    video = v;
+  chrome.runtime.sendMessage({ type: 'REGISTER_TAB' }).catch(() => {});
 
-    // Tell background we're ready
-    chrome.runtime.sendMessage({ type: 'REGISTER_TAB' });
+  // Video events → background ko batao (sirf user action pe)
+  v.addEventListener('play', () => {
+    // Agar extension ne resume kiya toh background ko mat batao
+    if (pauseReason !== null) return;
+    chrome.runtime.sendMessage({ type: 'VIDEO_PLAYING' }).catch(() => {});
+  });
 
-    // Listen to native video events → tell background
-    video.addEventListener('play', () => {
-        if (!resumeByExtension) {
-            // User manually played → tell background (triggers dual sync)
-            chrome.runtime.sendMessage({ type: 'VIDEO_PLAYING' });
-        }
-        resumeByExtension = false;
-    });
+  v.addEventListener('pause', () => {
+    // Agar extension ne pause kiya toh background ko mat batao
+    if (pauseReason !== null) return;
+    chrome.runtime.sendMessage({ type: 'VIDEO_PAUSED' }).catch(() => {});
+  });
 
-    video.addEventListener('pause', () => {
-        if (!pausedByExtension) {
-            // User manually paused → tell background (triggers dual sync)
-            chrome.runtime.sendMessage({ type: 'VIDEO_PAUSED' });
-        }
-        pausedByExtension = false;
-    });
+  // ── Feature 1B: Cursor leaves browser window ──
+  document.addEventListener('mouseleave', () => {
+    if (!v.paused) {
+      pauseReason = 'MOUSE_LEAVE';
+      v.pause();
+      showToast('⏸ Paused — cursor left');
+    }
+  });
 
-    // add some cursor feature ...
-    // mouse exit 
-    document.addEventListener('mouseleave', () => {
-        if (!video.paused) {
-            pausedByExtension = true;
-            video.pause();
-            showToast('⏸ Auto paused');
-        }
-    });
+  document.addEventListener('mouseenter', () => {
+    if (v.paused && pauseReason === 'MOUSE_LEAVE') {
+      pauseReason = null;
+      v.play().catch(() => {});
+      showToast('▶ Resumed');
+    }
+  });
 
-    // mouse enter 
-    document.addEventListener('mouseenter', () => {
-        if (!video.paused && pausedByExtension) {
-            resumeByExtension = true;
-            video.play();
-            pausedByExtension = false
-            showToast('▶ Resumed');
-        }
-    });
-
-
-
-
-
-
-});
-
-// ─── RECEIVE COMMANDS FROM BACKGROUND ──────────
-chrome.runtime.onMessage.addListener((msg) => {
+  // ── Commands from background ──────────────────
+  chrome.runtime.onMessage.addListener((msg) => {
     if (!video) return;
 
     switch (msg.type) {
 
-        // Feature 1: Auto pause when tab loses focus
-        case 'AUTO_PAUSE':
-            if (!video.paused) {
-                pausedByExtension = true;
-                video.pause();
-                showToast('⏸ Auto paused');
-            }
-            break;
+      case 'AUTO_PAUSE': // Tab switch — pause karo
+        if (!v.paused) {
+          pauseReason = 'TAB_SWITCH';
+          v.pause();
+        }
+        break;
 
-        // Feature 1: Auto resume when tab regains focus
-        case 'AUTO_RESUME':
-            if (video.paused && pausedByExtension) {
-                resumeByExtension = true;
-                video.play();
-                showToast('▶ Resumed');
-            }
-            break;
+      case 'AUTO_RESUME': // Tab switch — resume karo
+        if (v.paused && pauseReason === 'TAB_SWITCH') {
+          pauseReason = null;
+          v.play().catch(() => {});
+          showToast('▶ Resumed');
+        }
+        break;
 
-        // Feature 3: Dual sync — force pause (music tab)
-        case 'FORCE_PAUSE':
-            if (!video.paused) {
-                pausedByExtension = true;
-                video.pause();
-            }
-            break;
+      case 'DUAL_PAUSE': // Dusri tab play hui — hum pause ho
+        if (!v.paused) {
+          pauseReason = 'DUAL_SYNC';
+          v.pause();
+        }
+        break;
 
-        // Feature 3: Dual sync — force resume (music tab)
-        case 'FORCE_RESUME':
-            if (video.paused) {
-                resumeByExtension = true;
-                video.play().catch(() => {
-                    // Autoplay blocked — ignore, user can click play
-                });
-            }
-            break;
+      case 'DUAL_RESUME': // Dusri tab pause hui — hum play ho
+        if (v.paused && pauseReason === 'DUAL_SYNC') {
+          pauseReason = null;
+          v.play().catch(() => {});
+        }
+        break;
     }
+  });
 });
 
-// ─── FEATURE 2: Screenshot Video → Clipboard ───
-// Shortcut: Ctrl + CapsLock
+// ─── Feature 2: Screenshot → Clipboard ──────────
 document.addEventListener('keydown', async (e) => {
-    // CapsLock key code is 'CapsLock', keyCode 20
-    const isCapsLock = e.code === 'CapsLock' || e.keyCode === 20;
-
-    if (e.ctrlKey && isCapsLock) {
-        e.preventDefault();
-        e.stopPropagation();
-        await captureVideoFrame();
-    }
-});
-
-async function captureVideoFrame() {
-    if (!video) {
-        showToast('❌ No video found');
-        return;
-    }
+  if (e.ctrlKey && e.code === 'CapsLock') {
+    e.preventDefault();
+    const v = document.querySelector('video');
+    if (!v) { showToast('❌ No video found'); return; }
 
     try {
-        // Create a canvas the same size as the video
-        const canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
+      const scale = 2;
+      const canvas = document.createElement('canvas');
+      canvas.width = v.videoWidth * scale;
+      canvas.height = v.videoHeight * scale;
+      const ctx = canvas.getContext('2d');
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.scale(scale, scale);
+      ctx.drawImage(v, 0, 0);
 
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-        // Convert to blob (PNG, no disk save)
-        const blob = await new Promise((resolve) =>
-            canvas.toBlob(resolve, 'image/png')
-        );
-
-        if (!blob) {
-            showToast('❌ Screenshot failed');
-            return;
-        }
-
-        // Write directly to clipboard — no file saved anywhere
-        await navigator.clipboard.write([
-            new ClipboardItem({ 'image/png': blob })
-        ]);
-
-        showToast('📋 Frame copied! Ctrl+V to paste');
-
+      const blob = await new Promise(res => canvas.toBlob(res, 'image/png', 1.0));
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      showToast('📋 Frame copied! Ctrl+V to paste');
     } catch (err) {
-        console.error('[YT Study Helper] Screenshot error:', err);
-        showToast('❌ Clipboard error — check permissions');
+      showToast('❌ Screenshot failed');
+      console.error('[YT Helper]', err);
     }
-}
+  }
+});
 
-// ─── TOAST NOTIFICATION ─────────────────────────
-// Small non-intrusive overlay on the video
+// ─── Toast ───────────────────────────────────────
 function showToast(message) {
-    // Remove existing toast
-    const existing = document.getElementById('yt-study-toast');
-    if (existing) existing.remove();
+  const existing = document.getElementById('yt-study-toast');
+  if (existing) existing.remove();
 
-    const toast = document.createElement('div');
-    toast.id = 'yt-study-toast';
-    toast.innerText = message;
-
-    Object.assign(toast.style, {
-        position: 'fixed',
-        bottom: '80px',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        background: 'rgba(0,0,0,0.85)',
-        color: '#fff',
-        padding: '10px 20px',
-        borderRadius: '8px',
-        fontSize: '14px',
-        fontFamily: 'sans-serif',
-        zIndex: '99999',
-        pointerEvents: 'none',
-        transition: 'opacity 0.3s ease',
-        opacity: '1',
-        backdropFilter: 'blur(4px)',
-        border: '1px solid rgba(255,255,255,0.15)',
-        boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
-    });
-
-    document.body.appendChild(toast);
-
-    // Auto remove after 2.5s
-    setTimeout(() => {
-        toast.style.opacity = '0';
-        setTimeout(() => toast.remove(), 300);
-    }, 2500);
+  const toast = document.createElement('div');
+  toast.id = 'yt-study-toast';
+  toast.innerText = message;
+  Object.assign(toast.style, {
+    position: 'fixed', bottom: '80px', left: '50%',
+    transform: 'translateX(-50%)',
+    background: 'rgba(0,0,0,0.85)', color: '#fff',
+    padding: '10px 20px', borderRadius: '8px',
+    fontSize: '14px', fontFamily: 'sans-serif',
+    zIndex: '99999', pointerEvents: 'none',
+    opacity: '1', transition: 'opacity 0.3s ease',
+    boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
+  });
+  document.body.appendChild(toast);
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    setTimeout(() => toast.remove(), 300);
+  }, 2500);
 }
