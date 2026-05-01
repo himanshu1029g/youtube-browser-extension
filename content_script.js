@@ -1,11 +1,22 @@
 // ─── State ───────────────────────────────────────
 let video = null;
 let pauseReason = null;
-// pauseReason values:
-//   null         → user ne khud pause kiya
-//   'TAB_SWITCH' → tab change se auto pause
-//   'MOUSE_LEAVE'→ cursor window se bahar
-//   'DUAL_SYNC'  → dusri tab play hui
+// pauseReason:
+//   null          → user action
+//   'TAB_SWITCH'  → tab change
+//   'MOUSE_LEAVE' → cursor bahar
+//   'DUAL_SYNC'   → dusri tab se
+
+// ─── Extension context check ─────────────────────
+function isExtensionAlive() {
+  try { chrome.runtime.id; return true; }
+  catch (e) { return false; }
+}
+
+function safeSendMessage(msg) {
+  if (!isExtensionAlive()) return;
+  chrome.runtime.sendMessage(msg).catch(() => {});
+}
 
 // ─── Wait for video ──────────────────────────────
 function waitForVideo(callback) {
@@ -19,23 +30,26 @@ function waitForVideo(callback) {
 
 // ─── Init ────────────────────────────────────────
 waitForVideo((v) => {
-  chrome.runtime.sendMessage({ type: 'REGISTER_TAB' }).catch(() => {});
+  safeSendMessage({ type: 'REGISTER_TAB' });
 
-  // Video events → background ko batao (sirf user action pe)
+  // ── Video events → background ────────────────────
   v.addEventListener('play', () => {
-    // Agar extension ne resume kiya toh background ko mat batao
-    if (pauseReason !== null) return;
-    chrome.runtime.sendMessage({ type: 'VIDEO_PLAYING' }).catch(() => {});
+    if (!isExtensionAlive()) return;
+    if (pauseReason === 'TAB_SWITCH' || pauseReason === 'MOUSE_LEAVE') return;
+    pauseReason = null;
+    safeSendMessage({ type: 'VIDEO_PLAYING' });
   });
 
   v.addEventListener('pause', () => {
-    // Agar extension ne pause kiya toh background ko mat batao
-    if (pauseReason !== null) return;
-    chrome.runtime.sendMessage({ type: 'VIDEO_PAUSED' }).catch(() => {});
+    if (!isExtensionAlive()) return;
+    if (pauseReason === 'TAB_SWITCH' || pauseReason === 'MOUSE_LEAVE') return;
+    pauseReason = null;
+    safeSendMessage({ type: 'VIDEO_PAUSED' });
   });
 
-  // ── Feature 1B: Cursor leaves browser window ──
+  // ── Cursor leaves window ─────────────────────────
   document.addEventListener('mouseleave', () => {
+    if (!isExtensionAlive()) return;
     if (!v.paused) {
       pauseReason = 'MOUSE_LEAVE';
       v.pause();
@@ -44,6 +58,7 @@ waitForVideo((v) => {
   });
 
   document.addEventListener('mouseenter', () => {
+    if (!isExtensionAlive()) return;
     if (v.paused && pauseReason === 'MOUSE_LEAVE') {
       pauseReason = null;
       v.play().catch(() => {});
@@ -51,20 +66,21 @@ waitForVideo((v) => {
     }
   });
 
-  // ── Commands from background ──────────────────
+  // ── Commands from background ─────────────────────
   chrome.runtime.onMessage.addListener((msg) => {
+    if (!isExtensionAlive()) return;
     if (!video) return;
 
     switch (msg.type) {
 
-      case 'AUTO_PAUSE': // Tab switch — pause karo
+      case 'AUTO_PAUSE':
         if (!v.paused) {
           pauseReason = 'TAB_SWITCH';
           v.pause();
         }
         break;
 
-      case 'AUTO_RESUME': // Tab switch — resume karo
+      case 'AUTO_RESUME':
         if (v.paused && pauseReason === 'TAB_SWITCH') {
           pauseReason = null;
           v.play().catch(() => {});
@@ -72,27 +88,95 @@ waitForVideo((v) => {
         }
         break;
 
-      case 'DUAL_PAUSE': // Dusri tab play hui — hum pause ho
+      case 'DUAL_PAUSE':
+        removeResumeOverlay(); // agar overlay tha toh hatao
         if (!v.paused) {
           pauseReason = 'DUAL_SYNC';
           v.pause();
         }
         break;
 
-      case 'DUAL_RESUME': // Dusri tab pause hui — hum play ho
+      case 'DUAL_RESUME':
+        // Browser background tab mein autoplay block karta hai
+        // Solution: user ko ek click overlay dikhao
         if (v.paused && pauseReason === 'DUAL_SYNC') {
           pauseReason = null;
-          v.play().catch(() => {});
+
+          // Pehle seedha play try karo (kabhi kabhi kaam karta hai)
+          v.play().then(() => {
+            // Play ho gaya — overlay ki zaroorat nahi
+            removeResumeOverlay();
+          }).catch(() => {
+            // Browser ne block kiya → overlay dikhao
+            showResumeOverlay(v);
+          });
         }
         break;
     }
   });
 });
 
+// ─── Resume Overlay ──────────────────────────────
+// Jab browser autoplay block kare, ek big play button dikhao
+function showResumeOverlay(v) {
+  removeResumeOverlay(); // duplicate mat banao
+
+  const overlay = document.createElement('div');
+  overlay.id = 'yt-resume-overlay';
+
+  Object.assign(overlay.style, {
+    position: 'fixed',
+    top: '0', left: '0',
+    width: '100%', height: '100%',
+    background: 'rgba(0,0,0,0.6)',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: '999999',
+    cursor: 'pointer',
+    backdropFilter: 'blur(2px)',
+  });
+
+  overlay.innerHTML = `
+    <div style="
+      background: rgba(255,255,255,0.1);
+      border: 2px solid rgba(255,255,255,0.3);
+      border-radius: 50%;
+      width: 80px; height: 80px;
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 16px;
+    ">
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="white">
+        <path d="M8 5v14l11-7z"/>
+      </svg>
+    </div>
+    <div style="color:white; font-size:16px; font-family:sans-serif; font-weight:600;">
+      Click to resume music
+    </div>
+    <div style="color:rgba(255,255,255,0.5); font-size:12px; font-family:sans-serif; margin-top:6px;">
+      Browser needs a click to autoplay
+    </div>
+  `;
+
+  overlay.addEventListener('click', () => {
+    v.play().catch(() => {});
+    removeResumeOverlay();
+  });
+
+  document.body.appendChild(overlay);
+}
+
+function removeResumeOverlay() {
+  const existing = document.getElementById('yt-resume-overlay');
+  if (existing) existing.remove();
+}
+
 // ─── Feature 2: Screenshot → Clipboard ──────────
 document.addEventListener('keydown', async (e) => {
   if (e.ctrlKey && e.code === 'CapsLock') {
     e.preventDefault();
+    if (!isExtensionAlive()) return;
     const v = document.querySelector('video');
     if (!v) { showToast('❌ No video found'); return; }
 
@@ -112,7 +196,6 @@ document.addEventListener('keydown', async (e) => {
       showToast('📋 Frame copied! Ctrl+V to paste');
     } catch (err) {
       showToast('❌ Screenshot failed');
-      console.error('[YT Helper]', err);
     }
   }
 });
