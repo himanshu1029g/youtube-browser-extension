@@ -11,12 +11,12 @@ chrome.storage.local.get(['autoPause', 'dualTabSync'], (data) => {
 });
 
 chrome.storage.onChanged.addListener((changes) => {
-  if (changes.autoPause) settings.autoPause = changes.autoPause.newValue;
-  if (changes.dualTabSync) settings.dualTabSync = changes.dualTabSync.newValue;
+  if (changes.autoPause)    settings.autoPause   = changes.autoPause.newValue;
+  if (changes.dualTabSync)  settings.dualTabSync = changes.dualTabSync.newValue;
 });
 
-// ─── Tab Switch Detection ─────────────────────────
-chrome.tabs.onActivated.addListener(async ({ tabId }) => {
+// ─── Tab Switch (Feature 1 — tab change part) ────
+chrome.tabs.onActivated.addListener(({ tabId }) => {
   const prevTabId = activeTabId;
   activeTabId = tabId;
 
@@ -34,10 +34,12 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   if (!fromTabId) return;
 
   switch (msg.type) {
+
     case 'REGISTER_TAB':
       ytTabs.add(fromTabId);
       break;
 
+    // Feature 2: Kisi bhi tab pe video play hua → baaki sab pause
     case 'VIDEO_PLAYING':
       if (!settings.dualTabSync) return;
       ytTabs.forEach(tabId => {
@@ -45,6 +47,7 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
       });
       break;
 
+    // Feature 2: Kisi bhi tab pe video paused → baaki sab resume
     case 'VIDEO_PAUSED':
       if (!settings.dualTabSync) return;
       ytTabs.forEach(tabId => {
