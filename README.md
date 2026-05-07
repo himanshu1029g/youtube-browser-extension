@@ -78,7 +78,7 @@ This extension is not on the Chrome Web Store. Load it manually in Developer Mod
 
 **Clone:**
 ```bash
-git clone https://github.com/himanshu1029g/yt-study-extension.git
+git clone https://github.com/himanshu1029g/youtube-browser-extension.git
 ```
 
 **Or download ZIP** → Code → Download ZIP → Extract it
