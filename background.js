@@ -1,9 +1,9 @@
 // ─── State ───────────────────────────────────────
 let activeTabId = null;
 let ytTabs = new Set();
+let settings = {autoPause:true, dualTabSync:true};
 
-// ─── Settings ────────────────────────────────────
-let settings = { autoPause: true, dualTabSync: true };
+
 
 chrome.storage.local.get(['autoPause', 'dualTabSync'], (data) => {
   if (data.autoPause !== undefined) settings.autoPause = data.autoPause;
@@ -63,15 +63,10 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   if (activeTabId === tabId) activeTabId = null;
 });
 
-// ─── Safe Sender ──────────────────────────────────
+// ─── Safe message sender ──────────────────────────
 function safeSend(tabId, message) {
   chrome.tabs.get(tabId, (tab) => {
-    if (chrome.runtime.lastError || !tab) {
-      ytTabs.delete(tabId);
-      return;
-    }
-    chrome.tabs.sendMessage(tabId, message).catch(() => {
-      ytTabs.delete(tabId);
-    });
+    if (chrome.runtime.lastError || !tab) { ytTabs.delete(tabId); return; }
+    chrome.tabs.sendMessage(tabId, message).catch(() => ytTabs.delete(tabId));
   });
 }
