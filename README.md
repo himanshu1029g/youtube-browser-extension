@@ -1,35 +1,47 @@
 # 📺 YT Study Helper — Browser Extension
 
-A lightweight browser extension built for students who study from YouTube lectures.  
-No more manually pausing videos, cropping screenshots, or losing your music flow.
+> Built by a student, for students. No more manually pausing videos every time you switch tabs.
+
+---
+
+## 😤 The Problem
+
+I study from YouTube lectures while taking notes in Word/Notion. Every few minutes I had to:
+- Press Space to pause the video
+- Switch to Word, write the note
+- Switch back, press Space again to resume
+
+For screenshots it was even worse — Snipping Tool → crop → paste. Just to capture one diagram.
+
+This extension solves all of that automatically.
 
 ---
 
 ## ✨ Features
 
-### ⏸ 1. Auto Pause on Tab Switch
-- Lecture video **automatically pauses** when you switch to another tab (e.g., Word, Notion)
-- **Automatically resumes** when you come back to the YouTube tab
-- No more pressing Space bar every time
+### ⏸ Feature 1 — Auto Pause / Resume
+- Video **pauses automatically** when your cursor leaves the browser window (e.g., you click on Word)
+- Video **resumes automatically** when you come back
+- Also works on tab switch — switch to another tab → lecture pauses, come back → resumes
+- Toggle ON/OFF from the extension popup
 
-### 📋 2. Video Frame Screenshot → Clipboard
-- Press **`Ctrl + CapsLock`** on the YouTube tab
-- Only the **video frame** is captured (not the whole screen)
-- Directly copied to clipboard — just **`Ctrl+V`** in Word/Notion/anywhere
-- **Nothing saved to disk** — pure clipboard only
-
-### 🎵 3. Dual Tab Sync (Lecture ↔ Music)
-- Have a music YouTube tab open alongside your lecture tab?
+### 🎵 Feature 2 — Dual Tab Sync
+- Have a **music YouTube tab** open alongside your lecture tab?
 - Lecture **pauses** → music **auto plays**
-- Music **pauses** → lecture **auto resumes**
-- Seamless, zero manual switching
+- Music **pauses** → lecture **auto plays**
+- Works with any pause trigger — cursor leave, tab switch, or manual Space bar
+- If no second YouTube tab is open, everything works normally — no issues
+- Toggle ON/OFF from the extension popup
 
-### 🎛 Popup Toggles
-- Click the extension icon to **enable/disable** Auto Pause or Dual Sync anytime
+### 📋 Feature 3 — Video Screenshot to Clipboard
+- Press **`Ctrl + CapsLock`** anywhere on the YouTube tab
+- Only the **video frame** is captured (not your whole screen)
+- Goes straight to clipboard — just **`Ctrl+V`** in Word, Notion, Paint, anywhere
+- **Nothing is saved to disk** — pure clipboard, pure RAM
 
 ---
 
-## 🌐 Browser Compatibility
+## 🌐 Browser Support
 
 | Browser | Supported |
 |---|---|
@@ -37,50 +49,45 @@ No more manually pausing videos, cropping screenshots, or losing your music flow
 | Brave | ✅ |
 | Microsoft Edge | ✅ |
 | Opera / Vivaldi | ✅ |
-| Firefox | ❌ (uses different extension API) |
+| Firefox | ❌ (different extension API) |
 
-> Works on any **Chromium-based** browser.
+Works on any **Chromium-based** browser.
 
 ---
 
-## 📁 Folder Structure
+## 📁 Project Structure
 
 ```
 yt-study-extension/
-├── manifest.json        ← Extension config + permissions
-├── background.js        ← Tab tracking, pause/resume, dual sync
-├── content_script.js    ← Video control + screenshot logic
-├── popup.html           ← Toggle UI (click extension icon)
-├── popup.js             ← Saves toggle state
+├── manifest.json       ← Extension config + permissions (Manifest V3)
+├── background.js       ← Tab tracking, dual sync routing, settings
+├── content_script.js   ← Video control, screenshot, toast notifications
+├── popup.html          ← Extension popup UI with toggles
+├── popup.js            ← Toggle state saved to chrome.storage
 └── icons/
     └── icon128.png
 ```
 
 ---
 
-## 🚀 Installation (Developer Mode — No Store Required)
+## 🚀 Installation (No Store Required)
 
-> This extension is not published on Chrome Web Store.  
-> Load it manually in **Developer Mode** — takes less than a minute.
+This extension is not on the Chrome Web Store. Load it manually in Developer Mode — takes under a minute.
 
-### Step 1 — Download / Clone
+### Step 1 — Get the code
 
-**Option A — Clone via Git:**
+**Clone:**
 ```bash
-git clone https://github.com/YOUR_USERNAME/yt-study-extension.git
+git clone https://github.com/himanshu1029g/yt-study-extension.git
 ```
 
-**Option B — Download ZIP:**
-- Click **Code → Download ZIP** on this repo
-- Extract the ZIP on your computer
+**Or download ZIP** → Code → Download ZIP → Extract it
 
 ---
 
-### Step 2 — Open Extensions Page
+### Step 2 — Open Extensions page
 
-Open your browser and go to:
-
-| Browser | URL |
+| Browser | Address bar URL |
 |---|---|
 | Chrome | `chrome://extensions/` |
 | Brave | `brave://extensions/` |
@@ -90,52 +97,47 @@ Open your browser and go to:
 
 ### Step 3 — Enable Developer Mode
 
-- Look at the **top-right corner** of the Extensions page
-- Toggle **"Developer mode"** → **ON**
+Top-right corner → toggle **"Developer mode" ON**
 
 ---
 
-### Step 4 — Load the Extension
+### Step 4 — Load the extension
 
-- Click **"Load unpacked"** button (appears after enabling dev mode)
-- Navigate to and select the **`yt-study-extension`** folder  
-  *(the folder containing `manifest.json` — not the ZIP, not the parent folder)*
+Click **"Load unpacked"** → select the `yt-study-extension` folder  
+*(the one containing `manifest.json` — not the ZIP, not a parent folder)*
 
 ---
 
 ### Step 5 — Done ✅
 
-- The extension icon (▶ red circle) appears in your browser toolbar
-- Open any YouTube video and it starts working immediately
-- Click the icon to see toggles for each feature
+Extension icon appears in toolbar. Open any YouTube video — it works immediately.
+
+> **First time using Dual Sync?** Reload both YouTube tabs once (`Ctrl+R`) after installing.
 
 ---
 
-## ⌨️ Keyboard Shortcut
+## ⌨️ Shortcuts
 
 | Shortcut | Action |
 |---|---|
-| `Ctrl + CapsLock` | Capture current video frame → clipboard |
-
-> **Note:** The shortcut only works when your cursor/focus is on the YouTube tab.
+| `Ctrl + CapsLock` | Capture video frame → clipboard |
 
 ---
 
-## ⚠️ Known Limitations
+## ⚠️ Known Behaviour
 
-- **Firefox not supported** — Firefox uses Manifest V2 + different APIs
-- **Dual sync** may not work if YouTube blocks autoplay (browser restriction). Click play manually once if needed.
-- Extension resets if browser is restarted — reload it from `extensions/` page if it stops working (rare)
-- Screenshot requires the video to be **loaded and visible** on screen
+**Dual Sync + Autoplay:** Browsers block autoplay in background tabs. If the music tab hasn't been interacted with recently, a **"Click to resume"** overlay will appear on the music tab — just click it once and music starts. This is a browser security restriction, not a bug.
+
+**After extension reload:** Both YouTube tabs need a manual `Ctrl+R` refresh to re-register with the extension.
 
 ---
 
 ## 🔒 Privacy
 
-- **No data is collected** — ever
-- No internet requests made by the extension
-- Screenshot stays only in your clipboard (RAM) — never written to disk
-- All logic runs locally in your browser
+- Zero data collected — ever
+- No network requests made by this extension
+- Screenshot stays in clipboard (RAM) only — never written to disk
+- All logic runs 100% locally in your browser
 
 ---
 
@@ -144,22 +146,23 @@ Open your browser and go to:
 | Part | Technology |
 |---|---|
 | Extension API | Chrome Manifest V3 |
-| Tab Management | `chrome.tabs` API |
+| Tab Management | `chrome.tabs` + `chrome.tabs.onActivated` |
 | Video Control | HTML5 `<video>` DOM API |
-| Screenshot | Canvas API + Clipboard API |
-| Storage | `chrome.storage.local` |
-| Messaging | `chrome.runtime.sendMessage` |
+| Screenshot | Canvas API + Clipboard API (`ClipboardItem`) |
+| State | `chrome.storage.local` |
+| Communication | `chrome.runtime.sendMessage` / `onMessage` |
 
 ---
 
 ## 👤 Author
 
 **Himanshu Gupta**  
-B.Tech Computer Science | DevOps Intern  
-GitHub: [@himanshu1029g](https://github.com/himanshu1029g)
+B.Tech CSE | Full Stack + DevOps  
+📧 ft.himanshu10@gmail.com  
+🐙 [@himanshu1029g](https://github.com/himanshu1029g)
 
 ---
 
 ## 📄 License
 
-MIT License — free to use, modify, and share.
+MIT — free to use, fork, and modify.
